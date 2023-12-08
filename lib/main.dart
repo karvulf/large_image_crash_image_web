@@ -5,6 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 
+///
+/// This is an example project to test the performance working with
+/// big images. In Safari on mobile phone it has the biggest impact which
+/// can be tested easily (how to test this one on browser, more on README.md)
+///
 void main() {
   runApp(const MyApp());
 }
@@ -39,8 +44,8 @@ class _MyHomePageState extends State<MyHomePage> {
   final _assetPath = 'assets/large_image_4_mb.jpg';
   final _assetPath2 = 'assets/funny alpaca.jpg';
 
-  final int _sampledPixelSize = 50;
-  final int _imageQuality = 10;
+  final int _sampledPixelSize = 300;
+  final int _imageQuality = 90;
 
   bool _isLoading = false;
   bool _enableSampleDownFast = true;
@@ -53,8 +58,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _readBytes() async {
     // Load the image bytes from the asset
-    final ByteData data =
-        await rootBundle.load(_sampleBigImage ? _assetPath : _assetPath2);
+    final ByteData data = await rootBundle.load(
+      _sampleBigImage ? _assetPath : _assetPath2,
+    );
 
     // Convert the ByteData to Uint8List
     final Uint8List bytes = data.buffer.asUint8List();
@@ -94,6 +100,7 @@ class _MyHomePageState extends State<MyHomePage> {
       quality: _imageQuality,
       minWidth: minSizePixel,
       minHeight: minSizePixel,
+      keepExif: true,
     );
     return result;
   }
@@ -199,7 +206,12 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               if (_isLoading)
                 const Center(
-                  child: Text('Loading ... '),
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      Text('Loading ... '),
+                    ],
+                  ),
                 ),
               if (_bytes != null)
                 ...List.generate(
