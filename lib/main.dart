@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image/image.dart' as img;
 
 void main() {
   runApp(const MyApp());
@@ -16,21 +18,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
@@ -42,15 +29,6 @@ class MyApp extends StatelessWidget {
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
   final String title;
 
   @override
@@ -58,26 +36,93 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final assetPath = 'assets/large_image_4_mb.jpg';
+  final _assetPath = 'assets/large_image_4_mb.jpg';
+  final _assetPath2 = 'assets/funny alpaca.jpg';
+
+  final int _sampledPixelSize = 50;
+  final int _imageQuality = 10;
+
+  bool _isLoading = false;
+  bool _enableSampleDownFast = true;
+  bool _showImages = false;
+  bool _sampleBigImage = false;
+
+  String? _errorText;
+
   Uint8List? _bytes;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _readBytes();
-  }
 
   Future<void> _readBytes() async {
     // Load the image bytes from the asset
-    final ByteData data = await rootBundle.load(assetPath);
+    final ByteData data =
+        await rootBundle.load(_sampleBigImage ? _assetPath : _assetPath2);
 
     // Convert the ByteData to Uint8List
     final Uint8List bytes = data.buffer.asUint8List();
+    try {
+      late final Uint8List sampledBytes;
 
-    setState(() {
-      _bytes = bytes;
-    });
+      if (_enableSampleDownFast) {
+        sampledBytes = await _sampleDownFast(
+          bytes: bytes,
+          minSizePixel: _sampledPixelSize,
+        );
+      } else {
+        sampledBytes = _sampleDownSlow(
+          bytes: bytes,
+          maxPixelSize: _sampledPixelSize,
+        );
+      }
+
+      setState(() {
+        _bytes = sampledBytes;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorText = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<Uint8List> _sampleDownFast({
+    required Uint8List bytes,
+    required int minSizePixel,
+  }) async {
+    final result = await FlutterImageCompress.compressWithList(
+      bytes,
+      quality: _imageQuality,
+      minWidth: minSizePixel,
+      minHeight: minSizePixel,
+    );
+    return result;
+  }
+
+  Uint8List _sampleDownSlow({
+    required Uint8List bytes,
+    required int maxPixelSize,
+  }) {
+    final image = img.decodeImage(bytes)!;
+    late img.Image sampledImage;
+
+    if (image.width > image.height && image.width > maxPixelSize) {
+      sampledImage = img.copyResize(
+        image,
+        width: maxPixelSize,
+      );
+    } else if (image.height > maxPixelSize) {
+      sampledImage = img.copyResize(
+        image,
+        height: maxPixelSize,
+      );
+    } else {
+      sampledImage = image;
+    }
+
+    return Uint8List.fromList(img.encodeJpg(
+      sampledImage,
+      quality: _imageQuality,
+    ));
   }
 
   @override
@@ -86,18 +131,94 @@ class _MyHomePageState extends State<MyHomePage> {
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.inversePrimary,
           title: Text(widget.title),
+          actions: [],
         ),
-        body: Column(
-          children: [
-            if (_bytes != null)
-              SizedBox.square(
-                dimension: 100.0,
-                child: Image(
-                  fit: BoxFit.contain,
-                  image: MemoryImage(_bytes!),
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Column(
+                    children: [
+                      const Text('Sample down fast'),
+                      Switch(
+                        value: _enableSampleDownFast,
+                        onChanged: (_) {
+                          setState(() {
+                            _enableSampleDownFast = !_enableSampleDownFast;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 20.0),
+                  Column(
+                    children: [
+                      const Text('Show images'),
+                      Switch(
+                        value: _showImages,
+                        onChanged: (_) {
+                          setState(() {
+                            _showImages = !_showImages;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 20.0),
+                  Column(
+                    children: [
+                      const Text('Sample big image'),
+                      Switch(
+                        value: _sampleBigImage,
+                        onChanged: (_) {
+                          setState(() {
+                            _sampleBigImage = !_sampleBigImage;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _bytes = null;
+                      _isLoading = true;
+                    });
+                    _readBytes();
+                  },
+                  child: const Text('Sample Image down'),
                 ),
               ),
-          ],
+              if (_errorText != null)
+                Center(
+                  child: Text(_errorText!),
+                ),
+              if (_isLoading)
+                const Center(
+                  child: Text('Loading ... '),
+                ),
+              if (_bytes != null)
+                ...List.generate(
+                  1,
+                  (index) => SizedBox.square(
+                    dimension: 100.0,
+                    child: _showImages
+                        ? Image(
+                            fit: BoxFit.contain,
+                            image: MemoryImage(_bytes!),
+                          )
+                        : ColoredBox(
+                            color: Theme.of(context).primaryColor,
+                            child: const Placeholder(),
+                          ),
+                  ),
+                ),
+            ],
+          ),
         ));
   }
 }
